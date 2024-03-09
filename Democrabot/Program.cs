@@ -1,59 +1,51 @@
-﻿using Discord;
+﻿using Democrabot.Logic;
+using Democrabot.Modules;
+using Democrabot.Services;
+using Discord;
+using Discord.Commands;
 using Discord.WebSocket;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using TextCommandFramework.Services;
 
 internal class Program
 {
-    private static DiscordSocketClient? _client;
-
     public static async Task Main(string[] args)
     {
         var discordToken = Environment.GetEnvironmentVariable("DiscordAPI");
+        await using var services = ConfigureServices();
+        var client = services.GetRequiredService<DiscordSocketClient>();
+        await services.GetRequiredService<CommandHandlingService>().InitializeAsync();
+        client.Log += Logger.Log;
 
-        var config = new DiscordSocketConfig
-        {
-            GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.MessageContent
-        };
-        _client = new DiscordSocketClient(config);
+        client.MessageReceived += ClientReader.ClientOnMessageReceived;
 
-        _client.Log += Log;
-
-        _client.MessageReceived += ClientOnMessageReceived;
-        _client.Ready += () =>
+        client.Ready += () =>
         {
             Console.WriteLine("Bot is connected!");
             return Task.CompletedTask;
         };
 
-        await _client.LoginAsync(TokenType.Bot, discordToken);
-        await _client.StartAsync();
+        await client.LoginAsync(TokenType.Bot, discordToken);
+        await client.StartAsync();
         await Task.Delay(Timeout.Infinite);
     }
-    private static async Task ClientOnMessageReceived(SocketMessage socketMessage)
+
+    private static ServiceProvider ConfigureServices()
     {
-        await Task.Run(() =>
-        {
-            //Activity is not from a Bot.
-            if (!socketMessage.Author.IsBot)
+        var services = new ServiceCollection()
+            .AddSingleton(new DiscordSocketConfig
             {
+                GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.MessageContent
+            })
+            .AddSingleton<DiscordSocketClient>()
+            .AddSingleton<CommandService>()
+            .AddSingleton<ApiModule>()
+            .AddSingleton<CommandHandlingService>();
 
-                var authorId = socketMessage.Author.Id;
-                var channelId = socketMessage.Channel.Id.ToString();
-                var messageId = socketMessage.Id.ToString();
-                var message = socketMessage.Content;
-                if (message.Contains("democracy", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    var channel = _client.GetChannel(Convert.ToUInt64(channelId));
-                    var socketChannel = (ISocketMessageChannel)channel;
-                    var salute = new Emoji("🫡");
 
-                }
-            }
-        });
-    }
+        services.AddHttpClient<FlyDevService>(c => c.BaseAddress = new Uri("https://helldivers-2.fly.dev"));
+        return services.BuildServiceProvider();
 
-    private static Task Log(LogMessage msg)
-    {
-        Console.WriteLine(msg.ToString());
-        return Task.CompletedTask;
     }
 }
