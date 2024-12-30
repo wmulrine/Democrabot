@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Democrabot": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
